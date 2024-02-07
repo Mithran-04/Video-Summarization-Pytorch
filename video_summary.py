@@ -66,6 +66,11 @@ def main():
 
     print("Initialize dataset {}".format(args.dataset))
     dataset = h5py.File(args.dataset, 'r')
+    print("Starttinggg")
+    for item in dataset.keys():
+        print("item  # + :", dataset[item])
+    print("datasettttt   ",dataset)
+
     num_videos = len(dataset.keys())
     test_keys = []
 
@@ -78,7 +83,7 @@ def main():
 
     if args.model:
         print("Loading checkpoint from '{}'".format(args.model))
-        checkpoint = torch.load(args.model)
+        checkpoint = torch.load(args.model,map_location=torch.device('cpu'))
         model.load_state_dict(checkpoint)
     else:
         start_epoch = 0
@@ -87,7 +92,7 @@ def main():
         model = nn.DataParallel(model).cuda()
     evaluate(model, dataset, test_keys, use_gpu)
     print("Summary")
-    video2summary(os.path.join(args.save_dir,'result.h5'),args.input ,args.save_dir)####
+    video2summary(os.path.join(args.save_dir,'result.h5'),args.input ,args.save_dir)
 
 def evaluate(model, dataset, test_keys, use_gpu):
     with torch.no_grad():
@@ -143,11 +148,20 @@ def video2summary(h5_dir,video_dir,output_dir):
         os.mkdir(output_dir)
 
     h5_res = h5py.File(h5_dir, 'r')
-
+    print("CheckkkkStarttinggg")
+    for item in h5_res.keys():
+        print("item  # + :", h5_res[item])
+    print("Checkkkdatasettttt   ", h5_res)
+    print("/n/n")
+    print("Indexx")
     for idx1 in range(len(list(h5_res.keys()))):
         key = list(h5_res.keys())[idx1]
         summary = h5_res[key]['machine_summary'][...]
-        video_name = h5_res[key]['video_name'][()].split('/')[-1]
+        print("idx  ",idx1)
+        print(h5_res[key]['video_name'][()])
+        print()
+        video_name = h5_res[key]['video_name'][()].decode('utf-8').split('/')[-1]+"hi"
+        print("UpdatedVideoName   ",video_name)
         fps = h5_res[key]['fps'][()]
         if not os.path.isdir(osp.join(output_dir, video_name)):
             os.mkdir(osp.join(output_dir, video_name))
@@ -161,10 +175,11 @@ def video2summary(h5_dir,video_dir,output_dir):
         vid_writer.release()
     h5_res.close()
 
+
 if __name__ == '__main__':
     name_video = args.input.split('/')[-1].split('.')[0]
     args.dataset = os.path.join(args.output, name_video + '.h5')
-    args.save_name = name_video + '.mp4'
+    args.save_name = name_video+"hi" + '.mp4'
     if not os.path.exists(args.dataset):
         gen = Generate_Dataset(args.input, args.dataset)
         gen.generate_dataset()

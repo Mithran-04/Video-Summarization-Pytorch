@@ -8,6 +8,9 @@ import numpy as np
 from tabulate import tabulate
 import argparse
 
+import random
+
+
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
@@ -21,6 +24,9 @@ from networks.RL import compute_reward
 from utils import vsum_tool
 
 torch.manual_seed(config.SEED)
+random.seed(config.SEED)
+np.random.seed(config.SEED)
+
 os.environ["CUDA_VISIBLE_DEVCIES"] = config.GPU
 use_gpu = torch.cuda.is_available()
 if config.USE_CPU: use_gpu = False
@@ -28,6 +34,7 @@ if config.USE_CPU: use_gpu = False
 parser = argparse.ArgumentParser("Training")
 parser.add_argument('-d', '--dataset', type=str, default='', help="path to dataset file h5")
 args = parser.parse_args()
+
 
 def main():
     if not config.EVALUATE:
@@ -54,11 +61,20 @@ def main():
         split = splits[config.SPLIT_ID]
         train_keys = split["train_keys"]
         test_keys = split["test_keys"]
+        print("train keys")
+        print(train_keys)
         print("# total videos {}. # train videos {}. # test videos {}.".format(num_videos, len(train_keys), len(test_keys)))
 
     print("Initialize model")
+
     model = DSN(in_dim=config.INPUT_DIM, hid_dim=config.HIDDEN_DIM, num_layers = config.NUM_LAYERS, cell=config.RNN_CELL)
-    print("Model Size: {:.5f}M".format(sum(p.numel() for p in model.parameters())/1000000.0))
+    print("Model Size: {:.5f}M".format(sum(p.numel() for p in model.parameters()) / 1000000.0))
+    # checkpoint = torch.load(r"C:\Users\mithr\Video-Summarization-Pytorch\model\TransformerModel_TvSum_AllVid_epoch60.pth.tar", map_location=torch.device('cpu'))
+    # # print("Checkpoinnttttttttttttttttt")
+    # # print(checkpoint)
+    #
+    # model.load_state_dict(checkpoint)
+    # print("After initialization Model Size: {:.5f}M".format(sum(p.numel() for p in model.parameters())/1000000.0))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY)
     if config.STEP_SIZE > 0:
@@ -92,7 +108,7 @@ def main():
     model.train()
     baselines = {key: 0. for key in train_keys} # baseline rewards for videos
     reward_writers = {key: [] for key in train_keys} # record reward changes for each video
-
+    prev_reward= torch.tensor(0.0)
     for epoch in range(start_epoch, config.MAX_EPOCH):
         indices = np.arange(len(train_keys))
         np.random.shuffle(indices)
@@ -100,22 +116,43 @@ def main():
         # Input each Video to Model
         for idx in indices:
             key = train_keys[idx]
+            # print("Keyyyy  ",key)
             seq = dataset[key]['features'][...] # sequence of features, (seq_len, dim)
+            # print("Seqqqqqqqqqqq ")
+            # print(seq)
             seq = torch.from_numpy(seq).unsqueeze(0) # input shape (1, seq_len, dim)
-
+            # print("Seqqq, After squeeze")
+            # print("Shape of seq tensor:", seq.shape)
+            # print(seq)
             if use_gpu: seq = seq.cuda()
             probs = model(seq) # output shape (1, seq_len, 1)
+            # print("Shape of prbs tensor:", probs.shape)
+            # print("probs, from the model")
+            # print(probs)
 
             cost = config.BETA * (probs.mean() - 0.5) ** 2 # minimize summary length penalty term [Eq.11]
             m = Bernoulli(probs)
+            # print("cost ",cost)
+            # print("m ",m.probs)
+
 
             epis_rewards = []
             for _ in range(config.NUM_EPISODE):
                 actions = m.sample()
+                # print("ACtions   ",actions)
+                # print("actions ",actions.shape)
+                # print(actions)
+                # exit()
                 log_probs = m.log_prob(actions)
+                # print("log_probs ",log_probs.shape )
+                # print(log_probs)
+                # exit()
                 # print(actions)
                 # try:
-                reward = compute_reward(seq, actions, use_gpu=use_gpu)
+                reward = compute_reward(seq, actions, prev_reward, use_gpu=use_gpu)
+                # if(reward==torch.tensor(0.0)):
+                #     break
+                # prev_reward=reward
                 # except:
                     # pass
                 expected_reward = log_probs.mean() * (reward - baselines[key])
@@ -141,7 +178,7 @@ def main():
     print("Finished. Total elapsed time (h:m:s): {}".format(elapsed))
 
     model_state_dict = model.module.state_dict() if use_gpu else model.state_dict()
-    model_save_path = os.path.join(config.SAVE_DIR, 'model_epoch' + str(config.MAX_EPOCH) + '.pth.tar')
+    model_save_path = os.path.join(config.SAVE_DIR, 'TransformerModelNeww_TempSmooth_Summe_split2_Shuffle_epoch' + str(config.MAX_EPOCH) + '.pth.tar')
     save_checkpoint(model_state_dict, model_save_path)
     print("Model saved to {}".format(model_save_path))
 
